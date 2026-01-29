@@ -1,0 +1,223 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <title>BILL OF SUPPLY - {{ shop_name }}</title>
+    <meta charset="UTF-8">
+    <style>
+        body { font-family: Arial, Helvetica, sans-serif; margin:0; padding:0; background:#f9f9f9; }
+        .invoice-box { width: 210mm; max-width: 210mm; margin: 10mm auto; border: 1px solid #005B9A; padding: 10mm 12mm; background: white; }
+        .header { display: flex; justify-content: space-between; align-items: center; margin-bottom: 12mm; }
+        .header-left { display: flex; align-items: center; gap: 12mm; }
+        .logo { width: 120px; height: auto; }
+        .company-name { color: #006400; font-size: 18px; margin: 0; font-weight: bold; }
+        .header-right { text-align: right; font-size: 12px; }
+        h3 { color: #005B9A; text-align: center; border-bottom: 2px solid #FF6B00; padding-bottom: 6px; margin: 8mm 0; }
+        .info-table { width: 100%; border-collapse: collapse; margin-bottom: 10mm; }
+        .info-table td { padding: 8px; vertical-align: top; border: 1px solid #ccc; font-size: 11px; }
+        .items { width: 100%; border-collapse: collapse; font-size: 11px; margin-bottom: 8mm; }
+        .items th { background: #005B9A; color: white; padding: 6px; text-align: center; }
+        .items td { padding: 5px 6px; border: 1px solid #ddd; }
+        .items tr:nth-child(even) { background: #f8fbff; }
+        .amount { text-align: right; font-weight: bold; }
+        .gst-summary { margin-top: 10mm; width: 100%; font-size: 11px; }
+        .gst-summary th, .gst-summary td { padding: 5px; border: 1px solid #ccc; text-align: right; }
+        .final-total { font-size: 14px; font-weight: bold; color: #005B9A; text-align: right; margin-top: 8mm; }
+        .summary { float: right; width: 45%; margin-top: 10mm; }
+        .summary td { padding: 5px; }
+        .grand-total { font-size: 14px; font-weight: bold; color: #005B9A; }
+        .discount { color: #d32f2f; font-weight: bold; }
+        .footer-notes { font-size: 10px; color: #555; margin-top: 15mm; clear: both; }
+        .signatory { text-align: right; margin-top: 30mm; font-weight: bold; font-size: 12px; }
+        .no-print { text-align: center; margin-top: 15px; }
+        @media print {
+            body { margin:0; padding:0; background:white !important; }
+            .invoice-box { width: 210mm !important; height: 277mm !important; margin: 0 !important; padding: 10mm 12mm !important; border: none !important; box-shadow: none !important; }
+            .no-print { display: none !important; }
+            .items, .info-table { page-break-inside: avoid !important; }
+            tr { page-break-inside: avoid !important; }
+        }
+    </style>
+
+    <script>
+        function addRow() {
+            let t = document.getElementById("items");
+            let sr = t.rows.length;
+            let r = t.insertRow();
+            r.innerHTML = `
+                <td style="text-align:center;">${sr}</td>
+                <td>
+                    <select name="product[]" required style="width:100%; padding:4px; font-size:12px;">
+                        {% for p in products %}
+                            <option value="{{ p.id }}">{{ p.name }} {{ p.size }}</option>
+                        {% endfor %}
+                    </select>
+                </td>
+                <td><input type="number" name="qty[]" value="1" min="1" style="width:60px; text-align:center;"></td>
+            `;
+        }
+    </script>
+</head>
+<body>
+
+<div class="invoice-box">
+
+    <div class="header">
+        <div class="header-left">
+            <img src="{{ url_for('static', filename='logo.png') }}" alt="Logo" class="logo">
+            <div>
+                <h2 class="company-name">{{ shop_name }}</h2>
+                <p style="margin:3px 0; font-size:12px;">{{ shop_address }}</p>
+            </div>
+        </div>
+        <div class="header-right">
+            <p><b>Invoice No:</b> {{ invoice_no }}</p>
+            <p><b>Date:</b> {{ today.strftime('%d-%m-%Y') }}</p>
+        </div>
+    </div>
+
+    <h3>BILL OF SUPPLY</h3>
+
+    {% if not cart %}
+    <form method="POST" class="no-print">
+        <table class="info-table">
+            <tr>
+                <td width="33%">
+                    <b>Receiver / Billed To</b><br><br>
+                    Name: <input name="customer" required style="width:90%; padding:5px;"><br><br>
+                    Address: <input name="billing_address" required style="width:90%; padding:5px;"><br><br>
+                    Place of Supply: <input name="place_supply" style="width:90%; padding:5px;"><br><br>
+                    State: Bihar (10)
+                </td>
+                <td width="33%">
+                    <b>Consignee / Shipped To</b><br><br>
+                    Shipping Address: <input name="shipping_address" style="width:90%; padding:5px;"><br><br>
+                    Transport: <input name="transport" style="width:90%; padding:5px;"><br><br>
+                    Total Cases: <input name="total_cases" style="width:90%; padding:5px;">
+                </td>
+                <td width="34%">
+                    <b>Contact Details (optional)</b><br><br>
+                    Phone: <input name="phone" style="width:90%; padding:5px;"><br><br>
+                    GSTIN: <input name="gstin" style="width:90%; padding:5px;"><br><br>
+                    Udyam: <input name="udyam" style="width:90%; padding:5px;">
+                </td>
+            </tr>
+        </table>
+
+        <table id="items" class="items">
+            <thead>
+                <tr>
+                    <th>Sr</th>
+                    <th style="text-align:left;">Product</th>
+                    <th>Pack</th>
+                    <th>Rate (MRP)</th>  <!-- ← yahan MRP likha -->
+                    <th>Qty</th>
+                </tr>
+            </thead>
+            <tbody>
+                <tr>
+                    <td style="text-align:center;">1</td>
+                    <td>
+                        <select name="product[]" required style="width:100%; padding:5px;">
+                            {% for p in products %}
+                                <option value="{{ p.id }}">{{ p.name }} {{ p.size }}</option>
+                            {% endfor %}
+                        </select>
+                    </td>
+                    <td><input type="number" name="qty[]" value="1" min="1" style="width:60px; text-align:center;"></td>
+                </tr>
+            </tbody>
+        </table>
+
+        <br>
+        <button type="button" onclick="addRow()" style="padding:8px 16px; background:#005B9A; color:white; border:none;">+ Add More</button>
+        <button type="submit" style="padding:8px 20px; background:#FF6B00; color:white; border:none; margin-left:12px;">Generate Bill</button>
+    </form>
+    {% endif %}
+
+    {% if cart %}
+    <table class="info-table">
+        <tr>
+            <td width="33%">
+                <b>Receiver / Billed To</b><br><br>
+                Name: {{ customer or '—' }}<br>
+                Address: {{ billing_address or '—' }}<br>
+                Place of Supply: {{ place_supply or '—' }}<br>
+                State: Bihar (10)
+            </td>
+            <td width="33%">
+                <b>Consignee / Shipped To</b><br><br>
+                Shipping Address: {{ shipping_address or '—' }}<br>
+                Transport: {{ transport or '—' }}<br>
+                Total Cases: {{ total_cases or '—' }}
+            </td>
+            <td width="34%">
+                <b>Contact Details</b><br><br>
+                {% if phone %}Phone: {{ phone }}<br><br>{% endif %}
+                {% if gstin %}GSTIN: {{ gstin }}<br><br>{% endif %}
+                {% if udyam %}Udyam: {{ udyam }}<br>{% endif %}
+            </td>
+        </tr>
+    </table>
+
+    <table class="items">
+        <thead>
+            <tr>
+                <th>Sr</th>
+                <th style="text-align:left;">Product</th>
+                <th>Pack</th>
+                <th>Rate (MRP)</th>  <!-- ← yahan MRP dikh raha hai -->
+                <th>Qty</th>
+                <th>Amount (MRP)</th>
+                <th>GST %</th>
+                <th>GST Amt</th>
+                <th>Total</th>
+            </tr>
+        </thead>
+        <tbody>
+            {% for i in cart %}
+            <tr>
+                <td style="text-align:center;">{{ i.sr }}</td>
+                <td style="text-align:left;">{{ i.name }}</td>
+                <td style="text-align:center;">{{ i.size }}</td>
+                <td style="text-align:right;">{{ i.mrp }}</td>  <!-- ← Rate = MRP -->
+                <td style="text-align:center;">{{ i.qty }}</td>
+                <td style="text-align:right;">{{ i.total_net }}</td>  <!-- MRP × Qty ka discounted total nahi, balki net amount -->
+                <td style="text-align:center;">{{ i.gst_rate }}%</td>
+                <td style="text-align:right;">{{ i.gst_amount }}</td>
+                <td class="amount">{{ i.total_with_gst }}</td>
+            </tr>
+            {% endfor %}
+        </tbody>
+    </table>
+
+    <div class="summary">
+        <table style="width:100%;">
+            <tr><td>Discount %</td><td style="text-align:right;" class="discount">{{ discount_percent }}%</td></tr>
+            <tr><td>Net Amount</td><td style="text-align:right;">₹ {{ grand_total }}</td></tr>
+            {% if total_gst > 0 %}
+            <tr><td>Total GST (5% on applicable items)</td><td style="text-align:right;">₹ {{ total_gst }}</td></tr>
+            {% endif %}
+            <tr><td class="grand-total">Final Amount</td><td class="grand-total" style="text-align:right;">₹ {{ final_total }}</td></tr>
+        </table>
+    </div>
+
+    <div class="footer-notes">
+        <p>Goods once sold will not be taken back.</p>
+        <p>{% if total_gst > 0 %}GST @5% applicable on selected items{% else %}GST Exempted Supply{% endif %}</p>
+    </div>
+
+    <div class="signatory">
+        For <b>{{ shop_name }}</b><br><br><br>
+        Authorised Signatory
+    </div>
+
+    <div class="no-print" style="text-align:center;">
+        <button onclick="window.print()" style="padding:10px 30px; background:#005B9A; color:white; border:none; cursor:pointer;">
+            🖨 Print Bill
+        </button>
+    </div>
+    {% endif %}
+
+</div>
+</body>
+</html>
